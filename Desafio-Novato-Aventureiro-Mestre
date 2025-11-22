@@ -1,0 +1,178 @@
+#include <stdio.h>
+
+#define TAMANHO_TABULEIRO 10
+#define TAMANHO_NAVIO 3
+#define VALOR_AGUA 0
+#define VALOR_NAVIO 3
+#define VALOR_HABILIDADE 5
+#define HABIL_TAM 5  // Tamanho das matrizes de habilidades (5x5)
+
+int main() {
+    int tabuleiro[TAMANHO_TABULEIRO][TAMANHO_TABULEIRO];
+
+    // 1) Inicialização do tabuleiro com água (0)
+    for (int i = 0; i < TAMANHO_TABULEIRO; i++) {
+        for (int j = 0; j < TAMANHO_TABULEIRO; j++) {
+            tabuleiro[i][j] = VALOR_AGUA;
+        }
+    }
+
+    // 2) Posicionamento de navios (mantendo o que já tínhamos)
+    // Navio horizontal
+    int linhaH = 2, colunaH = 4;
+    if (colunaH + TAMANHO_NAVIO <= TAMANHO_TABULEIRO) {
+        for (int i = 0; i < TAMANHO_NAVIO; i++) {
+            tabuleiro[linhaH][colunaH + i] = VALOR_NAVIO;
+        }
+    }
+
+    // Navio vertical (com checagem de sobreposição)
+    int linhaV = 5, colunaV = 7;
+    if (linhaV + TAMANHO_NAVIO <= TAMANHO_TABULEIRO) {
+        for (int i = 0; i < TAMANHO_NAVIO; i++) {
+            if (tabuleiro[linhaV + i][colunaV] == VALOR_NAVIO) {
+                printf("Erro: sobreposição detectada no navio vertical.\n");
+                return 1;
+            }
+            tabuleiro[linhaV + i][colunaV] = VALOR_NAVIO;
+        }
+    }
+
+    // Navio diagonal principal (i cresce, j cresce)
+    int linhaD1 = 0, colunaD1 = 0;
+    if (linhaD1 + TAMANHO_NAVIO <= TAMANHO_TABULEIRO && colunaD1 + TAMANHO_NAVIO <= TAMANHO_TABULEIRO) {
+        for (int i = 0; i < TAMANHO_NAVIO; i++) {
+            if (tabuleiro[linhaD1 + i][colunaD1 + i] == VALOR_NAVIO) {
+                printf("Erro: sobreposição detectada no navio diagonal principal.\n");
+                return 1;
+            }
+            tabuleiro[linhaD1 + i][colunaD1 + i] = VALOR_NAVIO;
+        }
+    }
+
+    // Navio diagonal secundária (i cresce, j decresce)
+    int linhaD2 = 0, colunaD2 = 9;
+    if (linhaD2 + TAMANHO_NAVIO <= TAMANHO_TABULEIRO && colunaD2 - TAMANHO_NAVIO + 1 >= 0) {
+        for (int i = 0; i < TAMANHO_NAVIO; i++) {
+            if (tabuleiro[linhaD2 + i][colunaD2 - i] == VALOR_NAVIO) {
+                printf("Erro: sobreposição detectada no navio diagonal secundária.\n");
+                return 1;
+            }
+            tabuleiro[linhaD2 + i][colunaD2 - i] = VALOR_NAVIO;
+        }
+    }
+
+    // 3) Construção dinâmica das matrizes de habilidades (0 e 1) com loops e condicionais
+    int cone[HABIL_TAM][HABIL_TAM];
+    int cruz[HABIL_TAM][HABIL_TAM];
+    int octaedro[HABIL_TAM][HABIL_TAM];
+
+    // Cone apontando para baixo (topo no meio da primeira linha, expandindo)
+    // Ex.: linhas 0..2 formam: 00100, 01110, 11111 (e linhas 3..4 ficam 00000)
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            int centro = HABIL_TAM / 2; // 5/2 = 2
+            if (i == 0 && j == centro) {
+                cone[i][j] = 1;
+            } else if (i == 1 && (j >= centro - 1 && j <= centro + 1)) {
+                cone[i][j] = 1;
+            } else if (i == 2 && (j >= centro - 2 && j <= centro + 2)) {
+                cone[i][j] = 1;
+            } else {
+                cone[i][j] = 0;
+            }
+        }
+    }
+
+    // Cruz com origem no centro (linha e coluna centrais com 1s)
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            int centro = HABIL_TAM / 2;
+            if (i == centro || j == centro) {
+                cruz[i][j] = 1;
+            } else {
+                cruz[i][j] = 0;
+            }
+        }
+    }
+
+    // Octaedro (losango) com raio Manhattan <= 2: |i-centro| + |j-centro| <= 2
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            int centro = HABIL_TAM / 2;
+            int dist = (i > centro ? i - centro : centro - i) + (j > centro ? j - centro : centro - j);
+            if (dist <= 2) {
+                octaedro[i][j] = 1;
+            } else {
+                octaedro[i][j] = 0;
+            }
+        }
+    }
+
+    // 4) Sobreposição de habilidades no tabuleiro
+    // Regra: marcamos 5 onde a habilidade atinge água (0). Se já houver navio (3), mantemos 3.
+    // Coordenadas de origem (centro) para cada habilidade (definidas diretamente no código)
+    int origemConeLinha = 3, origemConeColuna = 3;
+    int origemCruzLinha = 6, origemCruzColuna = 2;
+    int origemOctLinha  = 6, origemOctColuna  = 7;
+
+    // Função inline de aplicação (via blocos) para evitar repetição e usar condicionais
+    // mapeia (i,j) da matriz de habilidade para (r,c) do tabuleiro, centrando no ponto de origem.
+    int centro = HABIL_TAM / 2;
+
+    // Aplica Cone
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            if (cone[i][j] == 1) {
+                int r = origemConeLinha + (i - centro);
+                int c = origemConeColuna + (j - centro);
+                if (r >= 0 && r < TAMANHO_TABULEIRO && c >= 0 && c < TAMANHO_TABULEIRO) {
+                    if (tabuleiro[r][c] == VALOR_AGUA) {
+                        tabuleiro[r][c] = VALOR_HABILIDADE;
+                    }
+                }
+            }
+        }
+    }
+
+    // Aplica Cruz
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            if (cruz[i][j] == 1) {
+                int r = origemCruzLinha + (i - centro);
+                int c = origemCruzColuna + (j - centro);
+                if (r >= 0 && r < TAMANHO_TABULEIRO && c >= 0 && c < TAMANHO_TABULEIRO) {
+                    if (tabuleiro[r][c] == VALOR_AGUA) {
+                        tabuleiro[r][c] = VALOR_HABILIDADE;
+                    }
+                }
+            }
+        }
+    }
+
+    // Aplica Octaedro (losango)
+    for (int i = 0; i < HABIL_TAM; i++) {
+        for (int j = 0; j < HABIL_TAM; j++) {
+            if (octaedro[i][j] == 1) {
+                int r = origemOctLinha + (i - centro);
+                int c = origemOctColuna + (j - centro);
+                if (r >= 0 && r < TAMANHO_TABULEIRO && c >= 0 && c < TAMANHO_TABULEIRO) {
+                    if (tabuleiro[r][c] == VALOR_AGUA) {
+                        tabuleiro[r][c] = VALOR_HABILIDADE;
+                    }
+                }
+            }
+        }
+    }
+
+    // 5) Exibição do tabuleiro com água (0), navio (3) e habilidade (5)
+    printf("\nTabuleiro de Batalha Naval (0=agua, 3=navio, 5=habilidade):\n\n");
+    for (int i = 0; i < TAMANHO_TABULEIRO; i++) {
+        for (int j = 0; j < TAMANHO_TABULEIRO; j++) {
+            printf("%d ", tabuleiro[i][j]);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
